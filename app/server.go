@@ -43,6 +43,27 @@ func handleConnection(connection net.Conn) {
 	reader := bufio.NewReader(connection)
 	requestLine, err := reader.ReadString('\n')
 
+	headers := make(map[string]string)
+	for {
+		line, err := reader.ReadString('\n')
+
+		if err != nil {
+			fmt.Println("Error reading request: ", err.Error())
+			return
+		}
+
+		line = strings.TrimSpace(line)
+
+		if line == "" {
+			break
+		}
+
+		headerPaths := strings.Split(line, ": ")
+		headers[headerPaths[0]] = headerPaths[1]
+	}
+
+	fmt.Println("Received headers: ", headers)
+
 	if err != nil {
 		fmt.Println("Error reading request: ", err.Error())
 		return
@@ -65,12 +86,27 @@ func handleConnection(connection net.Conn) {
 	}
 
 	if strings.HasPrefix(requestUrl, "/echo") {
-		echoSring := strings.Split(requestUrl, "/echo/")[1]
-		contentLength := len(echoSring)
-		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoSring)
-
-		connection.Write([]byte(response))
+		handleEchoRequest(connection, requestUrl)
+	}
+	if strings.HasPrefix(requestUrl, "/user-agent") {
+		handleUserAgentRequest(connection, headers)
 	}
 
 	connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+}
+
+func handleEchoRequest(connection net.Conn, requestUrl string) {
+	echoSring := strings.Split(requestUrl, "/echo/")[1]
+	contentLength := len(echoSring)
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoSring)
+
+	connection.Write([]byte(response))
+}
+
+func handleUserAgentRequest(connection net.Conn, headers map[string]string) {
+	userAgentHeaderValue := headers["User-Agent"]
+	contentLength := len(userAgentHeaderValue)
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgentHeaderValue)
+
+	connection.Write([]byte(response))
 }
