@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
@@ -21,11 +23,45 @@ func main() {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
+	defer listener.Close()
 
-	connection, err := listener.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	for {
+		connection, err := listener.Accept()
+
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		handleConnection(connection)
 	}
-	connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+
+}
+
+func handleConnection(connection net.Conn) {
+	defer connection.Close()
+
+	reader := bufio.NewReader(connection)
+	requestLine, err := reader.ReadString('\n')
+
+	if err != nil {
+		fmt.Println("Error reading request: ", err.Error())
+		return
+	}
+
+	fmt.Println("Received request: ", requestLine)
+	parts := strings.Split(requestLine, " ")
+
+	if len(parts) < 3 {
+		fmt.Println("Invalid request")
+		return
+	}
+
+	requestUrl := parts[1]
+	fmt.Println("Request URL: ", requestUrl)
+
+	if requestUrl == "/" {
+		connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	} else {
+		connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	}
 }
