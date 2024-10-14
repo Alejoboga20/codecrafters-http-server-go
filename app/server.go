@@ -15,7 +15,6 @@ func main() {
 	fmt.Println("Logs from your program will appear here!")
 
 	// Uncomment this block to pass the first stage
-	//
 	listener, err := net.Listen("tcp", "0.0.0.0:4221")
 
 	if err != nil {
@@ -23,9 +22,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = listener.Accept()
+	connection, err := listener.Accept()
 	if err != nil {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
+	connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 }
