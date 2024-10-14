@@ -57,7 +57,6 @@ func handleConnection(connection net.Conn) {
 	}
 
 	requestUrl := parts[1]
-	fmt.Println("Request URL: ", requestUrl)
 
 	if requestUrl == "/" {
 		connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
