@@ -57,10 +57,20 @@ func handleConnection(connection net.Conn) {
 	}
 
 	requestUrl := parts[1]
+	fmt.Println("Request URL: ", requestUrl)
 
 	if requestUrl == "/" {
 		connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-	} else {
-		connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		return
 	}
+
+	if strings.HasPrefix(requestUrl, "/echo") {
+		echoSring := strings.Split(requestUrl, "/echo/")[1]
+		contentLength := len(echoSring)
+		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoSring)
+
+		connection.Write([]byte(response))
+	}
+
+	connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 }
