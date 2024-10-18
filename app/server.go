@@ -37,13 +37,13 @@ func main() {
 
 }
 
-func readRequest(connection net.Conn) (string, map[string]string) {
+func readRequest(connection net.Conn) (string, map[string]string, string) {
 	reader := bufio.NewReader(connection)
 	requestLine, err := reader.ReadString('\n')
 
 	if err != nil {
 		fmt.Println("Error reading request: ", err.Error())
-		return "", nil
+		return "", nil, ""
 	}
 
 	headers := make(map[string]string)
@@ -51,8 +51,8 @@ func readRequest(connection net.Conn) (string, map[string]string) {
 		line, err := reader.ReadString('\n')
 
 		if err != nil {
-			fmt.Println("Error reading request: ", err.Error())
-			return "", nil
+			fmt.Println("Error reading headers: ", err.Error())
+			return "", nil, ""
 		}
 
 		line = strings.TrimSpace(line)
@@ -64,15 +64,32 @@ func readRequest(connection net.Conn) (string, map[string]string) {
 		headers[headerPaths[0]] = headerPaths[1]
 	}
 
-	return requestLine, headers
+	var body string
+	if contentLength, ok := headers["Content-Length"]; ok {
+		bodyLength := 0
+		fmt.Sscanf(contentLength, "%d", &bodyLength)
+
+		// Read the body based on the Content-Length
+		bodyBytes := make([]byte, bodyLength)
+		_, err := reader.Read(bodyBytes)
+		if err != nil {
+			fmt.Println("Error reading body: ", err.Error())
+			return requestLine, headers, ""
+		}
+
+		body = string(bodyBytes)
+	}
+
+	return requestLine, headers, body
 }
 
 func handleConnection(connection net.Conn) {
 	defer connection.Close()
-	requestLine, headers := readRequest(connection)
+	requestLine, headers, body := readRequest(connection)
 
 	fmt.Println("Received request: ", requestLine)
 	fmt.Println("Received headers: ", headers)
+	fmt.Println("Received body: ", body)
 
 	parts := strings.Split(requestLine, " ")
 
@@ -96,7 +113,7 @@ func handleConnection(connection net.Conn) {
 		handleUserAgentRequest(connection, headers)
 	}
 	if strings.HasPrefix(requestUrl, "/files") {
-		handleFilesRequest(connection, requestUrl)
+		handleFilesRequest(connection, requestUrl, headers, body)
 	}
 
 	connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
@@ -118,11 +135,27 @@ func handleUserAgentRequest(connection net.Conn, headers map[string]string) {
 	connection.Write([]byte(response))
 }
 
-func handleFilesRequest(connection net.Conn, requestUrl string) {
+func handleFilesRequest(connection net.Conn, requestUrl string, headers map[string]string, body string) {
 	dir := os.Args[2]
 
 	fileName := strings.Split(requestUrl, "/files/")[1]
 	filePath := dir + fileName
+
+	if _, ok := headers["Content-Length"]; ok {
+		file, err := os.Create(filePath)
+
+		if err != nil {
+			fmt.Println("Error creating file: ", err.Error())
+			connection.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+			return
+		}
+		defer file.Close()
+
+		file.Write([]byte(body))
+		connection.Write([]byte("HTTP/1.1 201 Created\r\n\r\n"))
+		return
+	}
+
 	file, err := os.Open(filePath)
 
 	if err != nil {
