@@ -37,11 +37,14 @@ func main() {
 
 }
 
-func handleConnection(connection net.Conn) {
-	defer connection.Close()
-
+func readRequest(connection net.Conn) (string, map[string]string) {
 	reader := bufio.NewReader(connection)
 	requestLine, err := reader.ReadString('\n')
+
+	if err != nil {
+		fmt.Println("Error reading request: ", err.Error())
+		return "", nil
+	}
 
 	headers := make(map[string]string)
 	for {
@@ -49,11 +52,10 @@ func handleConnection(connection net.Conn) {
 
 		if err != nil {
 			fmt.Println("Error reading request: ", err.Error())
-			return
+			return "", nil
 		}
 
 		line = strings.TrimSpace(line)
-
 		if line == "" {
 			break
 		}
@@ -62,14 +64,16 @@ func handleConnection(connection net.Conn) {
 		headers[headerPaths[0]] = headerPaths[1]
 	}
 
-	fmt.Println("Received headers: ", headers)
+	return requestLine, headers
+}
 
-	if err != nil {
-		fmt.Println("Error reading request: ", err.Error())
-		return
-	}
+func handleConnection(connection net.Conn) {
+	defer connection.Close()
+	requestLine, headers := readRequest(connection)
 
 	fmt.Println("Received request: ", requestLine)
+	fmt.Println("Received headers: ", headers)
+
 	parts := strings.Split(requestLine, " ")
 
 	if len(parts) < 3 {
@@ -91,6 +95,9 @@ func handleConnection(connection net.Conn) {
 	if strings.HasPrefix(requestUrl, "/user-agent") {
 		handleUserAgentRequest(connection, headers)
 	}
+	if strings.HasPrefix(requestUrl, "/files") {
+		handleFilesRequest(connection, requestUrl)
+	}
 
 	connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 }
@@ -109,4 +116,49 @@ func handleUserAgentRequest(connection net.Conn, headers map[string]string) {
 	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgentHeaderValue)
 
 	connection.Write([]byte(response))
+}
+
+func handleFilesRequest(connection net.Conn, requestUrl string) {
+	dir := os.Args[2]
+
+	fileName := strings.Split(requestUrl, "/files/")[1]
+	filePath := dir + fileName
+	file, err := os.Open(filePath)
+
+	if err != nil {
+		fmt.Println("Error opening file: ", err.Error())
+		connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		return
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+
+	if err != nil {
+		fmt.Println("Error getting file info: ", err.Error())
+		connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		return
+	}
+
+	fileSize := fileInfo.Size()
+
+	response := fmt.Sprintf(
+		"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n",
+		fileSize)
+
+	connection.Write([]byte(response))
+
+	buffer := make([]byte, 1024)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			fmt.Println("Error reading file: ", err.Error())
+			connection.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+			return
+		}
+		connection.Write(buffer[:n])
+	}
 }
