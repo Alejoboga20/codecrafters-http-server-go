@@ -107,7 +107,7 @@ func handleConnection(connection net.Conn) {
 	}
 
 	if strings.HasPrefix(requestUrl, "/echo") {
-		handleEchoRequest(connection, requestUrl)
+		handleEchoRequest(connection, requestUrl, headers)
 	}
 	if strings.HasPrefix(requestUrl, "/user-agent") {
 		handleUserAgentRequest(connection, headers)
@@ -119,11 +119,19 @@ func handleConnection(connection net.Conn) {
 	connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 }
 
-func handleEchoRequest(connection net.Conn, requestUrl string) {
+func handleEchoRequest(connection net.Conn, requestUrl string, headers map[string]string) {
 	echoSring := strings.Split(requestUrl, "/echo/")[1]
 	contentLength := len(echoSring)
-	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoSring)
 
+	encodingHeader := headers["Accept-Encoding"]
+
+	if encodingHeader == "gzip" {
+		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nContent-Encoding: gzip\r\n\r\n%s", contentLength, echoSring)
+		connection.Write([]byte(response))
+		return
+	}
+
+	response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoSring)
 	connection.Write([]byte(response))
 }
 
